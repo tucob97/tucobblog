@@ -76,11 +76,12 @@ const converter = new showdown.Converter();
 
 let history = [];
 let histPos = 0;
-let currentInput = ''; // <-- NEW: Store current typing
+let currentInput = ''; 
 
 let postList = []; 
 
-const commandList = ['help', 'cat', 'exit', 'clear', 'ls'];
+// MODIFIED: Added 'grep'
+const commandList = ['help', 'cat', 'exit', 'clear', 'ls', 'grep'];
 
 function print(text='') {
   term.innerHTML += text + '\n';
@@ -296,11 +297,13 @@ function prompt() {
   focusLastInput();
 }
 
+// MODIFIED: Added 'grep' command description
 const staticCommands = {
   help: `Available commands:
   help      - show this help
   ls        - list available posts (from POSTLIST.txt)
   cat [file] - display a post file (e.g., 'cat post1')
+  grep [pattern] - searches post names for a pattern (e.g., 'grep post')
   exit      - return to the blog index
   clear     - clear the terminal`
 };
@@ -334,6 +337,19 @@ function run(cmd) {
       print(`\ncat: ${arg}: No such file or post. Available: ${postList.join(', ')}`);
     } else {
       print('\ncat: usage: cat [post-name]');
+    }
+  } else if (command === 'grep') { // Handle grep, even if it's only against the manifest
+    const pattern = cmd.substring(command.length).trim();
+    if (!pattern) {
+        print('\ngrep: usage: grep [pattern]');
+    } else {
+        const matches = postList.filter(name => name.toLowerCase().includes(pattern.toLowerCase()));
+        if (matches.length > 0) {
+            const fileList = matches.map(p => `<span class="file-name">${p}</span>`).join('\n');
+            print(`\nMatches found: ${matches.length}\n${fileList}`);
+        } else {
+            print(`\nNo matches found for pattern: ${pattern}`);
+        }
     }
   } else if (staticCommands[cmd]) {
     print('\n' + staticCommands[cmd]);

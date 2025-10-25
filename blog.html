@@ -46,12 +46,12 @@ const term = document.getElementById('terminal');
 
 let history = [];
 let histPos = 0;
-let currentInput = ''; // <-- NEW: Store current typing
+let currentInput = ''; 
 
 let postManifest = []; 
 
-// MODIFIED: Added 'latest' to the commandList
-const commandList = ['help', 'ls', 'goto', 'exit', 'clear', 'latest'];
+// MODIFIED: Added 'grep' to the commandList
+const commandList = ['help', 'ls', 'goto', 'exit', 'clear', 'latest', 'grep'];
 
 function print(text='') {
   term.innerHTML += text + '\n';
@@ -245,22 +245,51 @@ function prompt() {
   focusLastInput();
 }
 
-// MODIFIED: Added 'latest' command description
+// MODIFIED: Added 'grep' command description
 const staticCommands = {
   help: `Available commands:
   help      - show this help
   ls        - list all available blog posts
   goto [file] - displays the content of a post by redirecting to its static page (e.g., 'goto post')
   latest    - go to the most recent post (last entry in POSTLIST.txt)
+  grep [pattern] - searches post names for a pattern (e.g., 'grep post')
   exit      - return to the main site terminal
   clear     - clear the terminal`
 };
 
+// NEW FUNCTION: Implements the grep logic for post names
+function grepPostNames(pattern) {
+    if (postManifest.length === 0) {
+        print('\ngrep: Error: Post manifest not loaded.');
+        return;
+    }
+    if (!pattern) {
+        print('\ngrep: usage: grep [pattern]');
+        return;
+    }
+
+    const patternLower = pattern.toLowerCase();
+    
+    // Filter postManifest for names containing the pattern
+    const matches = postManifest.filter(name => 
+        name.toLowerCase().includes(patternLower)
+    );
+
+    if (matches.length > 0) {
+        const fileList = matches.map(p => `<span class="file-name">${p}</span>`).join('\n');
+        print(`\nMatches found: ${matches.length}\n${fileList}`);
+    } else {
+        print(`\nNo matches found for pattern: ${pattern}`);
+    }
+}
+
+// MODIFIED: run function to handle the 'grep' command and improve argument parsing
 function run(cmd) {
   const inputLine = term.querySelector('.input-line:last-child');
   inputLine.outerHTML = `<span>${cmd}</span>`;
   
-  const [command, arg] = cmd.split(/\s+/);
+  const [command, ...args] = cmd.split(/\s+/); // Use rest operator to capture all arguments
+  const arg = args.join(' '); // Combine arguments back into a single search string
 
   if (command === 'clear') {
     term.innerHTML = '';
@@ -285,7 +314,6 @@ function run(cmd) {
     } else {
       print('\ngoto: usage: goto [post-name] (e.g., goto post)');
     }
-  // NEW LOGIC: Handle 'latest' command
   } else if (command === 'latest') {
     if (postManifest.length > 0) {
         const latestPost = postManifest[postManifest.length - 1];
@@ -295,7 +323,8 @@ function run(cmd) {
     } else {
         print('\nlatest: Error: Post manifest not loaded or empty.');
     }
-  // END NEW LOGIC
+  } else if (command === 'grep') { // NEW COMMAND HANDLER
+    grepPostNames(arg); 
   } else if (staticCommands[cmd]) {
     print('\n' + staticCommands[cmd]);
   } else if (cmd !== '') {
