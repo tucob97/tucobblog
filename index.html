@@ -253,6 +253,7 @@ function run(cmd) {
   
   else if (cmd === 'clear') {
     term.innerHTML = '';
+    print('Type \'help\' for commands.');
   } else if (commands[cmd]) {
     print(commands[cmd]);
   } else if (cmd !== '') {

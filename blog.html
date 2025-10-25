@@ -249,10 +249,10 @@ function prompt() {
 const staticCommands = {
   help: `Available commands:
   help      - show this help
-  ls        - list all available blog posts
   goto [file] - displays the content of a post by redirecting to its static page (e.g., 'goto post')
-  latest    - go to the most recent post (last entry in POSTLIST.txt)
   grep [pattern] - searches post names for a pattern (e.g., 'grep post')
+  ls        - list all available blog posts
+  latest    - go to the most recent post (last entry in POSTLIST.txt)
   exit      - return to the main site terminal
   clear     - clear the terminal`
 };
@@ -293,6 +293,7 @@ function run(cmd) {
 
   if (command === 'clear') {
     term.innerHTML = '';
+    print('Type \'help\' for commands.');
   } else if (command === 'exit') {
     window.location.href = 'index.html';
     return;
