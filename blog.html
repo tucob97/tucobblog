@@ -51,7 +51,7 @@ let currentInput = ''; // <-- NEW: Store current typing
 let postManifest = []; 
 
 // MODIFIED: Added 'latest' to the commandList
-const commandList = ['help', 'ls', 'cat', 'exit', 'clear', 'latest'];
+const commandList = ['help', 'ls', 'goto', 'exit', 'clear', 'latest'];
 
 function print(text='') {
   term.innerHTML += text + '\n';
@@ -90,13 +90,13 @@ function findCompletion(input) {
         return matches.length === 1 ? matches[0] : null;
     }
     
-    if (command === 'cat' && arg) {
+    if (command === 'goto' && arg) {
         const matches = postManifest.filter(filename => 
             filename.startsWith(arg)
         );
 
         if (matches.length === 1) {
-            return 'cat ' + matches[0];
+            return 'goto ' + matches[0];
         } else if (matches.length > 1) {
              let prefix = arg;
              let finished = false;
@@ -108,7 +108,7 @@ function findCompletion(input) {
                      finished = true;
                  }
              }
-             return prefix.length > arg.length ? 'cat ' + prefix : null;
+             return prefix.length > arg.length ? 'goto ' + prefix : null;
         }
     }
     return null;
@@ -140,7 +140,7 @@ function handleTab(inputElement) {
         }
 
         const [command, arg] = currentText.split(/\s+/);
-        if (command === 'cat' && arg) {
+        if (command === 'goto' && arg) {
             const fileMatches = postManifest.filter(filename => filename.startsWith(arg));
             if (fileMatches.length > 1) {
                 inputElement.outerHTML = `<span>${currentText}</span>`;
@@ -250,7 +250,7 @@ const staticCommands = {
   help: `Available commands:
   help      - show this help
   ls        - list all available blog posts
-  cat [file] - displays the content of a post by redirecting to its static page (e.g., 'cat post')
+  goto [file] - displays the content of a post by redirecting to its static page (e.g., 'goto post')
   latest    - go to the most recent post (last entry in POSTLIST.txt)
   exit      - return to the main site terminal
   clear     - clear the terminal`
@@ -276,14 +276,14 @@ function run(cmd) {
     }
     const fileList = postManifest.map(p => `<span class="file-name">${p}</span>`).join('\n');
     print(`\nTotal posts: ${postManifest.length}\n${fileList}`);
-  } else if (command === 'cat') {
+  } else if (command === 'goto') {
     if (postManifest.includes(arg)) {
       window.location.href = `blogpost/${arg}.html`;
       return; 
     } else if (arg) {
-      print(`\ncat: ${arg}: No such file or post.`);
+      print(`\ngoto: ${arg}: No such file or post.`);
     } else {
-      print('\ncat: usage: cat [post-name] (e.g., cat post)');
+      print('\ngoto: usage: goto [post-name] (e.g., goto post)');
     }
   // NEW LOGIC: Handle 'latest' command
   } else if (command === 'latest') {
