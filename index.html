@@ -25,11 +25,9 @@
     min-width: 1ch; /* Ensure input area is visible */
     outline: none;
   }
-
-  /* UPDATED: Shadow Hint Styling - Matching blog.html for color */
   #shadow-hint {
     position: absolute;
-    color: #c1c194; /* Dark gray for the "shadow" effect from blog.html */
+    color: #c1c194; 
     pointer-events: none;
     white-space: pre;
     z-index: 1;
@@ -43,6 +41,7 @@ const term = document.getElementById('terminal');
 
 let history = [];
 let histPos = 0;
+let currentInput = ''; // <-- NEW: Store current typing
 
 const commands = {
   help: `
@@ -73,7 +72,6 @@ I like building minimal, fast, and elegant software.`,
   clear: ''
 };
 
-// Extract a list of command names for autocompletion
 const commandList = Object.keys(commands).filter(c => c !== 'clear').concat(['blog', 'clear', 'exit']);
 
 function print(text='') {
@@ -88,7 +86,21 @@ function focusLastInput() {
   }
 }
 
-// Function to find the best autocompletion match (Kept from original index.html)
+// <-- NEW: Helper function to move cursor to the end
+function moveCursorToEnd(el) {
+    if (!el) return;
+    // Check if el.childNodes[0] exists, otherwise use el
+    const node = el.childNodes[0] || el;
+    const len = node.textContent.length;
+    
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.setStart(node, len);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+}
+
 function findCompletion(input) {
     if (!input) return null;
 
@@ -99,7 +111,6 @@ function findCompletion(input) {
     if (matches.length === 1) {
         return matches[0];
     } else if (matches.length > 1) {
-         // More than one match, find the longest common prefix
          let prefix = input;
          let finished = false;
          while (!finished) {
@@ -115,38 +126,29 @@ function findCompletion(input) {
     return null;
 }
 
-// Function to handle the Tab key press (Updated to include hint update)
 function handleTab(inputElement) {
     const currentText = inputElement.textContent.trim();
     const completedText = findCompletion(currentText);
 
     if (completedText) {
         inputElement.textContent = completedText;
-        // Move cursor to the end
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.setStart(inputElement.childNodes[0] || inputElement, completedText.length);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
+        moveCursorToEnd(inputElement); // <-- UPDATED: Use helper
     } else if (currentText) {
         const matches = commandList.filter(cmd => 
             cmd.startsWith(currentText)
         );
         if (matches.length > 1) {
-            // Temporarily replace input with list of matches and prompt again
             inputElement.outerHTML = `<span>${currentText}</span>`;
             print();
             print(matches.join('  '));
             print();
-            prompt(); // Re-prompt and return
+            prompt(); 
             return true;
         }
     }
     return true; 
 }
 
-// NEW: Function to update the shadow hint
 function updateShadowHint(inputElement) {
     const currentText = inputElement.textContent.trim();
     const completedText = findCompletion(currentText);
@@ -154,67 +156,81 @@ function updateShadowHint(inputElement) {
     let hintHTML = '';
 
     if (completedText && completedText.length > currentText.length) {
-        // Calculate the necessary padding (spaces) to align the hint
-        // Use non-breaking space (\u00A0) for accurate width measurement in monospace
         const padding = currentText.padEnd(completedText.length, '\u00A0').slice(0, currentText.length);
         const hintText = completedText.substring(currentText.length);
-        
-        // This hint structure ensures the hint starts exactly where the user input ends
         hintHTML = `<span style="opacity:0;">${padding}</span>${hintText}`;
     }
     
-    // Update the hint element within the input's relative container
     let shadowHint = inputElement.previousElementSibling;
     if (shadowHint && shadowHint.id === 'shadow-hint') {
         shadowHint.innerHTML = hintHTML;
     }
 }
 
-// UPDATED: Function to set up listeners, including creating the shadow hint
 function updatePromptListeners() {
   const input = term.querySelector('.input-line:last-child');
   
-  // Create shadow hint container just before the input line
   const shadowHint = document.createElement('span');
   shadowHint.id = 'shadow-hint';
   input.parentNode.insertBefore(shadowHint, input);
 
   input.addEventListener('input', () => {
-      // Update hint whenever user types
       updateShadowHint(input);
+      // If user types, reset history position
+      histPos = history.length;
   });
   
+  // <-- UPDATED: Keydown listener with smooth history
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const cmd = input.textContent.trim();
-      history.push(cmd);
-      histPos = history.length;
+      if (cmd) { // Only save non-empty commands
+        history.push(cmd);
+      }
+      histPos = history.length; // Reset position
+      currentInput = ''; // Clear stored input
       run(cmd);
+      
     } else if (e.key === 'Tab') {
         e.preventDefault();
         if (handleTab(input)) {
-            updateShadowHint(input); // Update hint after autocompletion
+            updateShadowHint(input); 
         }
+        
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (histPos > 0) input.textContent = history[--histPos];
-      else input.textContent = '';
+      if (histPos === history.length) {
+        // Save the current line buffer
+        currentInput = input.textContent;
+      }
+      if (histPos > 0) {
+        histPos--;
+        input.textContent = history[histPos];
+        moveCursorToEnd(input);
+      }
+      
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (histPos < history.length - 1) input.textContent = history[++histPos];
-      else input.textContent = '';
+      if (histPos < history.length - 1) {
+        histPos++;
+        input.textContent = history[histPos];
+        moveCursorToEnd(input);
+      } else if (histPos === history.length - 1) {
+        // Restore the saved line buffer
+        histPos++;
+        input.textContent = currentInput;
+        moveCursorToEnd(input);
+      }
     }
     
-    // Defer hint update slightly if text manipulation happened
     setTimeout(() => updateShadowHint(input), 0);
-
   });
 }
 
 function prompt() {
   term.innerHTML += `<span class="prompt">user@site:~$ </span><span class="input-line" contenteditable="true" autofocus></span>`;
-  updatePromptListeners(); // Use new listener setup
+  updatePromptListeners(); 
   focusLastInput();
 }
 
@@ -239,7 +255,6 @@ function run(cmd) {
   prompt();
 }
 
-// Global click listener to focus input
 document.addEventListener('click', (e) => {
     if (!e.target.classList.contains('input-line')) {
         focusLastInput();

@@ -18,7 +18,7 @@
     min-height: 100vh;
   }
   .prompt {
-    color: #0ff; /* Cyan prompt */
+    color: #0ff; 
   }
   .input-line {
     display: inline;
@@ -32,7 +32,7 @@
   
   #shadow-hint {
     position: absolute;
-    color: #c1c194; /* Dark gray for the "shadow" effect */
+    color: #c1c194; 
     pointer-events: none;
     white-space: pre;
     z-index: 1;
@@ -46,12 +46,11 @@ const term = document.getElementById('terminal');
 
 let history = [];
 let histPos = 0;
+let currentInput = ''; // <-- NEW: Store current typing
 
 let postManifest = []; 
 
 const commandList = ['help', 'ls', 'cat', 'exit', 'clear'];
-
-// --- Core Terminal Functions (unchanged logic) ---
 
 function print(text='') {
   term.innerHTML += text + '\n';
@@ -63,6 +62,20 @@ function focusLastInput() {
     input.focus();
     term.scrollTop = term.scrollHeight;
   }
+}
+
+// <-- NEW: Helper function to move cursor to the end
+function moveCursorToEnd(el) {
+    if (!el) return;
+    const node = el.childNodes[0] || el;
+    const len = node.textContent.length;
+    
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.setStart(node, len);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
 }
 
 function findCompletion(input) {
@@ -77,16 +90,13 @@ function findCompletion(input) {
     }
     
     if (command === 'cat' && arg) {
-        // Filter the post list to find matches
         const matches = postManifest.filter(filename => 
             filename.startsWith(arg)
         );
 
         if (matches.length === 1) {
-            // Found a single match, return the full command
             return 'cat ' + matches[0];
         } else if (matches.length > 1) {
-             // More than one match, find the longest common prefix
              let prefix = arg;
              let finished = false;
              while (!finished) {
@@ -97,39 +107,27 @@ function findCompletion(input) {
                      finished = true;
                  }
              }
-             // Only return the prefix if it's longer than the current arg
              return prefix.length > arg.length ? 'cat ' + prefix : null;
         }
     }
     return null;
 }
 
-// Function to handle the Tab key press (UPDATED)
 function handleTab(inputElement) {
     const currentText = inputElement.textContent.trim();
     const completedText = findCompletion(currentText);
 
     if (completedText) {
-        // If the completion is just the command, add a space after it
         const isCommandCompletion = commandList.includes(completedText) && !currentText.includes(' ');
         let newText = completedText;
         if (isCommandCompletion) {
             newText += ' ';
         }
-
         inputElement.textContent = newText;
-        // Move cursor to the end of the newly completed text
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.setStart(inputElement.childNodes[0] || inputElement, newText.length);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
+        moveCursorToEnd(inputElement); // <-- UPDATED: Use helper
     } 
     
-    // If no unique completion, check if we need to list matches
     else if (currentText) {
-        // Check for command matches
         const commandMatches = commandList.filter(cmd => cmd.startsWith(currentText));
         if (commandMatches.length > 1) {
             inputElement.outerHTML = `<span>${currentText}</span>`;
@@ -140,7 +138,6 @@ function handleTab(inputElement) {
             return true;
         }
 
-        // Check for file matches
         const [command, arg] = currentText.split(/\s+/);
         if (command === 'cat' && arg) {
             const fileMatches = postManifest.filter(filename => filename.startsWith(arg));
@@ -155,7 +152,6 @@ function handleTab(inputElement) {
         }
     }
     
-    // Prevent default browser behavior (e.g., jumping focus)
     return true; 
 }
 
@@ -190,32 +186,55 @@ function updatePromptListeners() {
 
   input.addEventListener('input', () => {
       updateShadowHint(input);
+      // If user types, reset history position
+      histPos = history.length;
   });
   
+  // <-- UPDATED: Keydown listener with smooth history
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const cmd = input.textContent.trim();
-      history.push(cmd);
-      histPos = history.length;
+      if (cmd) { // Only save non-empty commands
+        history.push(cmd);
+      }
+      histPos = history.length; // Reset position
+      currentInput = ''; // Clear stored input
       run(cmd);
+      
     } else if (e.key === 'Tab') {
         e.preventDefault();
         if (handleTab(input)) {
             updateShadowHint(input);
         }
+        
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (histPos > 0) input.textContent = history[--histPos];
-      else input.textContent = '';
+      if (histPos === history.length) {
+        // Save the current line buffer
+        currentInput = input.textContent;
+      }
+      if (histPos > 0) {
+        histPos--;
+        input.textContent = history[histPos];
+        moveCursorToEnd(input);
+      }
+      
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (histPos < history.length - 1) input.textContent = history[++histPos];
-      else input.textContent = '';
+      if (histPos < history.length - 1) {
+        histPos++;
+        input.textContent = history[histPos];
+        moveCursorToEnd(input);
+      } else if (histPos === history.length - 1) {
+        // Restore the saved line buffer
+        histPos++;
+        input.textContent = currentInput;
+        moveCursorToEnd(input);
+      }
     }
     
     setTimeout(() => updateShadowHint(input), 0);
-
   });
 }
 
@@ -224,8 +243,6 @@ function prompt() {
   updatePromptListeners();
   focusLastInput();
 }
-
-// --- Command Logic (Updated to Redirect) ---
 
 const staticCommands = {
   help: `Available commands:
@@ -254,12 +271,10 @@ function run(cmd) {
       prompt();
       return;
     }
-    // Lists the post slugs (without .html or .md)
     const fileList = postManifest.map(p => `<span class="file-name">${p}</span>`).join('  ');
     print(`\nTotal posts: ${postManifest.length}\n${fileList}`);
   } else if (command === 'cat') {
     if (postManifest.includes(arg)) {
-      // Key Change: Redirect to the static HTML file for SEO
       window.location.href = `blogpost/${arg}.html`;
       return; 
     } else if (arg) {
@@ -277,7 +292,6 @@ function run(cmd) {
   prompt();
 }
 
-// --- Initialization Function (Dynamically fetching the post list) ---
 async function initBlog() {
   const tucob = `
 #                                                                                    
@@ -295,16 +309,14 @@ async function initBlog() {
   print('Welcome to the Blog Terminal');
 
   try {
-    // IMPORTANT: Assuming POSTLIST.txt is inside the 'blogpost' folder.
     const url = `blogpost/POSTLIST.txt`; 
-    const response = await fetch(url, { cache: "no-store" }); // Added cache option for extra measure
+    const response = await fetch(url, { cache: "no-store" }); 
  
     if (!response.ok) {
         throw new Error('Manifest fetch failed.');
     }
     const text = await response.text();
     
-    // Filter and map: removes empty lines and the '.md' extension
     postManifest = text.split('\n').filter(line => line.trim() !== '');
 
     print(`[Post list loaded. ${postManifest.length} files found.]`);

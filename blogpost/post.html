@@ -30,28 +30,6 @@
         min-width: 1ch;
         outline: none;
       }
-      /* Styling the STATIC content to look like a terminal output */
-      /* Kept for 'clear' functionality, but content is now loaded dynamically */
-      .post-content-section {
-        white-space: normal;
-        margin-top: 10px;
-        margin-bottom: 20px;
-      }
-      .post-content-section h1, .post-content-section h2 {
-        color: #f00; 
-        text-decoration: underline;
-        margin-top: 1em;
-        margin-bottom: 0.5em;
-      }
-      .post-content-section pre {
-        background-color: #111;
-        border: 1px solid #333;
-        padding: 8px;
-        color: #0ff;
-        white-space: pre-wrap;
-      }
-      
-      /* NEW: Styling for dynamically loaded content */
       .post-output {
         white-space: normal;
         margin-top: 10px;
@@ -70,8 +48,6 @@
         color: #0ff;
         white-space: pre-wrap;
       }
-
-      /* Cursor/Hint Styling */
       #shadow-hint {
         position: absolute;
         color: #c1c194;
@@ -87,26 +63,22 @@
 <script>
 const term = document.getElementById('terminal');
 
-// NEW: Initialize Showdown Converter
 const converter = new showdown.Converter(); 
 
 let history = [];
 let histPos = 0;
-// postList will contain slugs without '.md' (e.g., 'post1')
+let currentInput = ''; // <-- NEW: Store current typing
+
 let postList = []; 
 
 const commandList = ['help', 'cat', 'exit', 'clear', 'ls'];
 
-// --- Utility Functions (Shell logic is the same as blog.html) ---
 function print(text='') {
   term.innerHTML += text + '\n';
 }
 
 async function catFile(fileName) {
-  // Use the full filename provided (e.g., 'post.md' or 'post1.md')
   const filePath = `${fileName}`; 
-  
-  //print(`[Fetching ${filePath}...]`);
   
   try {
     const response = await fetch(filePath);
@@ -114,19 +86,16 @@ async function catFile(fileName) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const markdownText = await response.text();
-    
-    // Use the converter instance
     const htmlContent = converter.makeHtml(markdownText);
     print(`<div class="post-output">${htmlContent}</div>`);
 
   } catch (error) {
-    // The error message for local server issue
     print(`<span style="color: #f00;">Error: Could not load post from ${filePath}.</span>`);
     print(`<span style="color: #f00;">**REMINDER:** You must run a local web server for this to work.</span>`);
   }
   
   print('\n'); 
-  prompt(); // Prompt after async operation completes
+  prompt(); 
 }
 
 function focusLastInput() {
@@ -137,30 +106,39 @@ function focusLastInput() {
   }
 }
 
+// <-- NEW: Helper function to move cursor to the end
+function moveCursorToEnd(el) {
+    if (!el) return;
+    const node = el.childNodes[0] || el;
+    const len = node.textContent.length;
+    
+    const range = document.createRange();
+    const sel = window.getSelection();
+    range.setStart(node, len);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+}
+
 function findCompletion(input) {
     if (!input) return null;
     const parts = input.trim().split(/\s+/);
     const command = parts[0];
-    // This line correctly captures the argument after the command:
     const arg = parts.length > 1 ? parts.slice(1).join(' ') : null;
 
-    // 1. Command completion (e.g., 'c' + TAB -> 'cat')
     if (parts.length === 1 && !input.endsWith(' ')) {
         const matches = commandList.filter(cmd => cmd.startsWith(command));
         return matches.length === 1 ? matches[0] : null;
     }
     
     if (command === 'cat' && arg) {
-        // Filter the post list to find matches
-        const matches = postList.filter(filename => // <-- FIX 1: Was postManifest
+        const matches = postList.filter(filename => 
             filename.startsWith(arg)
         );
 
         if (matches.length === 1) {
-            // Found a single match, return the full command
             return 'cat ' + matches[0];
         } else if (matches.length > 1) {
-             // More than one match, find the longest common prefix
              let prefix = arg;
              let finished = false;
              while (!finished) {
@@ -171,7 +149,6 @@ function findCompletion(input) {
                      finished = true;
                  }
              }
-             // Only return the prefix if it's longer than the current arg
              return prefix.length > arg.length ? 'cat ' + prefix : null;
         }
     }
@@ -179,36 +156,24 @@ function findCompletion(input) {
     return null;
 }
 
-// Function to handle the Tab key press (UPDATED)
 function handleTab(inputElement) {
     const currentText = inputElement.textContent.trim();
     const completedText = findCompletion(currentText);
 
     if (completedText) {
-        // If the completion is just the command, add a space after it
         const isCommandCompletion = commandList.includes(completedText) && !currentText.includes(' ');
         let newText = completedText;
         if (isCommandCompletion) {
             newText += ' ';
         }
-
         inputElement.textContent = newText;
-        // Move cursor to the end of the newly completed text
-        const range = document.createRange();
-        const sel = window.getSelection();
-        range.setStart(inputElement.childNodes[0] || inputElement, newText.length);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
+        moveCursorToEnd(inputElement); // <-- UPDATED: Use helper
     } 
     
-    // If no unique completion, check if we need to list matches
     else if (currentText) {
-
-        // Check for file matches
         const [command, arg] = currentText.split(/\s+/);
         if (command === 'cat' && arg) {
-            const fileMatches = postList.filter(filename => filename.startsWith(arg)); // <-- FIX 2: Was postManifest
+            const fileMatches = postList.filter(filename => filename.startsWith(arg)); 
             if (fileMatches.length > 1) {
                 inputElement.outerHTML = `<span>${currentText}</span>`;
                 print();
@@ -218,7 +183,6 @@ function handleTab(inputElement) {
                 return true;
             }
         }
-        // Check for command matches
         const commandMatches = commandList.filter(cmd => cmd.startsWith(currentText));
         if (commandMatches.length > 1) {
             inputElement.outerHTML = `<span>${currentText}</span>`;
@@ -230,7 +194,6 @@ function handleTab(inputElement) {
         }
     }
     
-    // Prevent default browser behavior (e.g., jumping focus)
     return true; 
 }
 
@@ -265,32 +228,55 @@ function updatePromptListeners() {
 
   input.addEventListener('input', () => {
       updateShadowHint(input);
+      // If user types, reset history position
+      histPos = history.length;
   });
   
+  // <-- UPDATED: Keydown listener with smooth history
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const cmd = input.textContent.trim();
-      history.push(cmd);
-      histPos = history.length;
+      if (cmd) { // Only save non-empty commands
+        history.push(cmd);
+      }
+      histPos = history.length; // Reset position
+      currentInput = ''; // Clear stored input
       run(cmd);
+      
     } else if (e.key === 'Tab') {
         e.preventDefault();
         if (handleTab(input)) {
             updateShadowHint(input);
         }
+        
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (histPos > 0) input.textContent = history[--histPos];
-      else input.textContent = '';
+      if (histPos === history.length) {
+        // Save the current line buffer
+        currentInput = input.textContent;
+      }
+      if (histPos > 0) {
+        histPos--;
+        input.textContent = history[histPos];
+        moveCursorToEnd(input);
+      }
+      
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (histPos < history.length - 1) input.textContent = history[++histPos];
-      else input.textContent = '';
+      if (histPos < history.length - 1) {
+        histPos++;
+        input.textContent = history[histPos];
+        moveCursorToEnd(input);
+      } else if (histPos === history.length - 1) {
+        // Restore the saved line buffer
+        histPos++;
+        input.textContent = currentInput;
+        moveCursorToEnd(input);
+      }
     }
     
     setTimeout(() => updateShadowHint(input), 0);
-
   });
 }
 
@@ -301,7 +287,6 @@ function prompt() {
   focusLastInput();
 }
 
-// --- Command Logic for Post Page ---
 const staticCommands = {
   help: `Available commands:
   help      - show this help
@@ -320,10 +305,8 @@ function run(cmd) {
 
   if (command === 'clear') {
     term.innerHTML = '';
-    // Since static content is gone, just print a message on clear
     print('Type \'ls\' to see available posts, or \'help\' for commands.');
   } else if (command === 'exit') {
-    // Go back to the blog index/router page
     window.location.href = '../blog.html';
     return;
   } else if (command === 'ls') {
@@ -335,11 +318,9 @@ function run(cmd) {
     print(`\nTotal posts: ${postList.length}\n${fileList}`);
 
   } else if (command === 'cat') {
-    // NEW LOGIC: Use catFile for dynamic fetching
     if (postList.includes(arg)) {
-      // Pass the full file name including extension to catFile
       catFile(`${arg}.md`); 
-      shouldPrompt = false; // catFile calls prompt() on completion
+      shouldPrompt = false; 
     } else if (arg) {
       print(`\ncat: ${arg}: No such file or post. Available: ${postList.join(', ')}`);
     } else {
@@ -357,25 +338,14 @@ function run(cmd) {
   }
 }
 
-// --- Initialization ---
 async function initPost() {
-    // 1. Clear any initial content/placeholders
     term.innerHTML = '';
 
-    // 2. Fetch the post list dynamically
     try {
-        // **--- CACHE-BUSTING FIX ---**
-        // Append a new, unique query parameter (timestamp) to the URL
-        const timestamp = new Date().getTime();
         const url = `POSTLIST.txt`; 
-        // **---------------------------**
-
-        // IMPORTANT: Assuming POSTLIST.txt is in the same directory.
-        const response = await fetch(url, { cache: "no-store" }); // Added cache option for extra measure
+        const response = await fetch(url, { cache: "no-store" }); 
         if (response.ok) {
             const text = await response.text();
-            // Filter and map: removes empty lines and the '.md' extension
-            // We store slugs (e.g., 'post1') in postList
             postList = text.split('\n')
                            .filter(line => line.trim() !== '')
                            .map(line => line.replace(/\.md$/i, ''));
@@ -384,8 +354,6 @@ async function initPost() {
         console.error("Could not load post manifest for cat command:", error);
     }
     
-    // 3. Automatically load the main post file: post.md
-    // catFile will handle the fetching and call prompt() when done.
     catFile('post.md');
 }
 
