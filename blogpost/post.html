@@ -141,27 +141,59 @@ function findCompletion(input) {
     if (!input) return null;
     const parts = input.trim().split(/\s+/);
     const command = parts[0];
+    // This line correctly captures the argument after the command:
     const arg = parts.length > 1 ? parts.slice(1).join(' ') : null;
 
-    if (command === 'cat' && arg) {
-        // Match slugs, but return the slug with the file extension for catFile
-        const matches = postList.filter(slug => slug.startsWith(arg));
-        return matches.length === 1 ? 'cat ' + matches[0] : null;
+    // 1. Command completion (e.g., 'c' + TAB -> 'cat')
+    if (parts.length === 1 && !input.endsWith(' ')) {
+        const matches = commandList.filter(cmd => cmd.startsWith(command));
+        return matches.length === 1 ? matches[0] : null;
     }
-    const matches = commandList.filter(cmd => cmd.startsWith(command));
-    return matches.length === 1 ? matches[0] : null;
+    
+    if (command === 'cat' && arg) {
+        // Filter the post list to find matches
+        const matches = postList.filter(filename => // <-- FIX 1: Was postManifest
+            filename.startsWith(arg)
+        );
+
+        if (matches.length === 1) {
+            // Found a single match, return the full command
+            return 'cat ' + matches[0];
+        } else if (matches.length > 1) {
+             // More than one match, find the longest common prefix
+             let prefix = arg;
+             let finished = false;
+             while (!finished) {
+                 const currentChar = matches[0][prefix.length];
+                 if (currentChar && matches.every(match => match.startsWith(prefix + currentChar))) {
+                     prefix += currentChar;
+                 } else {
+                     finished = true;
+                 }
+             }
+             // Only return the prefix if it's longer than the current arg
+             return prefix.length > arg.length ? 'cat ' + prefix : null;
+        }
+    }
+    
+    return null;
 }
 
+// Function to handle the Tab key press (UPDATED)
 function handleTab(inputElement) {
     const currentText = inputElement.textContent.trim();
     const completedText = findCompletion(currentText);
 
     if (completedText) {
+        // If the completion is just the command, add a space after it
+        const isCommandCompletion = commandList.includes(completedText) && !currentText.includes(' ');
         let newText = completedText;
-        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+        if (isCommandCompletion) {
             newText += ' ';
         }
+
         inputElement.textContent = newText;
+        // Move cursor to the end of the newly completed text
         const range = document.createRange();
         const sel = window.getSelection();
         range.setStart(inputElement.childNodes[0] || inputElement, newText.length);
@@ -169,6 +201,36 @@ function handleTab(inputElement) {
         sel.removeAllRanges();
         sel.addRange(range);
     } 
+    
+    // If no unique completion, check if we need to list matches
+    else if (currentText) {
+
+        // Check for file matches
+        const [command, arg] = currentText.split(/\s+/);
+        if (command === 'cat' && arg) {
+            const fileMatches = postList.filter(filename => filename.startsWith(arg)); // <-- FIX 2: Was postManifest
+            if (fileMatches.length > 1) {
+                inputElement.outerHTML = `<span>${currentText}</span>`;
+                print();
+                print(fileMatches.join('  '));
+                print();
+                prompt(); 
+                return true;
+            }
+        }
+        // Check for command matches
+        const commandMatches = commandList.filter(cmd => cmd.startsWith(currentText));
+        if (commandMatches.length > 1) {
+            inputElement.outerHTML = `<span>${currentText}</span>`;
+            print();
+            print(commandMatches.join('  '));
+            print();
+            prompt(); 
+            return true;
+        }
+    }
+    
+    // Prevent default browser behavior (e.g., jumping focus)
     return true; 
 }
 
@@ -220,6 +282,7 @@ function updatePromptListeners() {
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (histPos > 0) input.textContent = history[--histPos];
+      else input.textContent = '';
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (histPos < history.length - 1) input.textContent = history[++histPos];
@@ -230,6 +293,7 @@ function updatePromptListeners() {
 
   });
 }
+
 
 function prompt() {
   term.innerHTML += `<span class="prompt">user@post:~$ </span><span class="input-line" contenteditable="true" autofocus></span>`;
@@ -265,11 +329,11 @@ function run(cmd) {
   } else if (command === 'ls') {
     if (postList.length === 0) {
       print('\nls: Error: Manifest not loaded. Check POSTLIST.txt location and server status.');
-    } else {
-      // Lists the post slugs (without .md)
-      const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('  ');
-      print(`\nTotal posts: ${postList.length}\n${fileList}`);
-    }
+    } 
+      
+    const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('  ');
+    print(`\nTotal posts: ${postList.length}\n${fileList}`);
+
   } else if (command === 'cat') {
     // NEW LOGIC: Use catFile for dynamic fetching
     if (postList.includes(arg)) {
