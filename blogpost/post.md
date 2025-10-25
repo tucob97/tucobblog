@@ -13,3 +13,8 @@ function helloTerminal() {
 helloTerminal();
 // Output: Hello
 ```
+
+``` mermaid
+    flowchart LR
+        A --> B
+```
