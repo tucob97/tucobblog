@@ -77,22 +77,48 @@ function findCompletion(input) {
     }
     
     if (command === 'cat' && arg) {
-        const matches = postManifest.filter(filename => filename.startsWith(arg));
-        return matches.length === 1 ? 'cat ' + matches[0] : null;
+        // Filter the post list to find matches
+        const matches = postManifest.filter(filename => 
+            filename.startsWith(arg)
+        );
+
+        if (matches.length === 1) {
+            // Found a single match, return the full command
+            return 'cat ' + matches[0];
+        } else if (matches.length > 1) {
+             // More than one match, find the longest common prefix
+             let prefix = arg;
+             let finished = false;
+             while (!finished) {
+                 const currentChar = matches[0][prefix.length];
+                 if (currentChar && matches.every(match => match.startsWith(prefix + currentChar))) {
+                     prefix += currentChar;
+                 } else {
+                     finished = true;
+                 }
+             }
+             // Only return the prefix if it's longer than the current arg
+             return prefix.length > arg.length ? 'cat ' + prefix : null;
+        }
     }
     return null;
 }
 
+// Function to handle the Tab key press (UPDATED)
 function handleTab(inputElement) {
     const currentText = inputElement.textContent.trim();
     const completedText = findCompletion(currentText);
 
     if (completedText) {
+        // If the completion is just the command, add a space after it
+        const isCommandCompletion = commandList.includes(completedText) && !currentText.includes(' ');
         let newText = completedText;
-        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+        if (isCommandCompletion) {
             newText += ' ';
         }
+
         inputElement.textContent = newText;
+        // Move cursor to the end of the newly completed text
         const range = document.createRange();
         const sel = window.getSelection();
         range.setStart(inputElement.childNodes[0] || inputElement, newText.length);
@@ -100,6 +126,36 @@ function handleTab(inputElement) {
         sel.removeAllRanges();
         sel.addRange(range);
     } 
+    
+    // If no unique completion, check if we need to list matches
+    else if (currentText) {
+        // Check for command matches
+        const commandMatches = commandList.filter(cmd => cmd.startsWith(currentText));
+        if (commandMatches.length > 1) {
+            inputElement.outerHTML = `<span>${currentText}</span>`;
+            print();
+            print(commandMatches.join('  '));
+            print();
+            prompt(); 
+            return true;
+        }
+
+        // Check for file matches
+        const [command, arg] = currentText.split(/\s+/);
+        if (command === 'cat' && arg) {
+            const fileMatches = postManifest.filter(filename => filename.startsWith(arg));
+            if (fileMatches.length > 1) {
+                inputElement.outerHTML = `<span>${currentText}</span>`;
+                print();
+                print(fileMatches.join('  '));
+                print();
+                prompt(); 
+                return true;
+            }
+        }
+    }
+    
+    // Prevent default browser behavior (e.g., jumping focus)
     return true; 
 }
 
@@ -240,7 +296,9 @@ async function initBlog() {
 
   try {
     // IMPORTANT: Assuming POSTLIST.txt is inside the 'blogpost' folder.
-    const response = await fetch('blogpost/POSTLIST.txt'); 
+    const url = `blogpost/POSTLIST.txt`; 
+    const response = await fetch(url, { cache: "no-store" }); // Added cache option for extra measure
+ 
     if (!response.ok) {
         throw new Error('Manifest fetch failed.');
     }
