@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>~ my terminal site ~</title>
+<style>
+  body {
+    background-color: #3e3b3b;
+    color: rgb(136,185,136);
+    font-family: monospace;
+    margin: 0;
+    padding: 10px
+  }
+  #terminal {
+    white-space: pre-wrap;
+    outline: none;
+    min-height: 100vh; 
+  }
+  .prompt {
+    color: #0ff;
+  }
+  .input-line {
+    display: inline;
+    position: relative; /* Add for shadow-hint positioning */
+    min-width: 1ch; /* Ensure input area is visible */
+    outline: none;
+  }
+
+  /* UPDATED: Shadow Hint Styling - Matching blog.html for color */
+  #shadow-hint {
+    position: absolute;
+    color: #c1c194; /* Dark gray for the "shadow" effect from blog.html */
+    pointer-events: none;
+    white-space: pre;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+<div id="terminal" tabindex="0"></div>
+<script>
+const term = document.getElementById('terminal');
+
+let history = [];
+let histPos = 0;
+
+const commands = {
+  help: `
+Available commands:
+  help      - show this help
+  about     - info about me
+  projects  - what I build
+  contact   - how to reach me
+  blog      - read my latest posts (use 'blog')
+  clear     - clear the terminal`,
+  
+  about: `
+I'm [Your Name], a [Your Role/Field].
+I like building minimal, fast, and elegant software.`,
+
+  projects: `Some of my projects:
+  - ascii-portfolio  : personal ASCII site
+  - cli-blog         : markdown posts in terminal
+  - open-source work : github.com/yourhandle`,
+
+  contact: `Contact me:
+  email  : you@example.com
+  github : github.com/yourhandle
+`,
+
+  blog: `Type 'blog' to access my blog posts.`,
+
+  clear: ''
+};
+
+// Extract a list of command names for autocompletion
+const commandList = Object.keys(commands).filter(c => c !== 'clear').concat(['blog', 'clear', 'exit']);
+
+function print(text='') {
+  term.innerHTML += text + '\n';
+}
+
+function focusLastInput() {
+  const input = term.querySelector('.input-line:last-child');
+  if (input) {
+    input.focus();
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+// Function to find the best autocompletion match (Kept from original index.html)
+function findCompletion(input) {
+    if (!input) return null;
+
+    const matches = commandList.filter(cmd => 
+        cmd.startsWith(input)
+    );
+
+    if (matches.length === 1) {
+        return matches[0];
+    } else if (matches.length > 1) {
+         // More than one match, find the longest common prefix
+         let prefix = input;
+         let finished = false;
+         while (!finished) {
+             const currentChar = matches[0][prefix.length];
+             if (currentChar && matches.every(match => match.startsWith(prefix + currentChar))) {
+                 prefix += currentChar;
+             } else {
+                 finished = true;
+             }
+         }
+         return prefix.length > input.length ? prefix : null;
+    }
+    return null;
+}
+
+// Function to handle the Tab key press (Updated to include hint update)
+function handleTab(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    if (completedText) {
+        inputElement.textContent = completedText;
+        // Move cursor to the end
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.setStart(inputElement.childNodes[0] || inputElement, completedText.length);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } else if (currentText) {
+        const matches = commandList.filter(cmd => 
+            cmd.startsWith(currentText)
+        );
+        if (matches.length > 1) {
+            // Temporarily replace input with list of matches and prompt again
+            inputElement.outerHTML = `<span>${currentText}</span>`;
+            print();
+            print(matches.join('  '));
+            print();
+            prompt(); // Re-prompt and return
+            return true;
+        }
+    }
+    return true; 
+}
+
+// NEW: Function to update the shadow hint
+function updateShadowHint(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    let hintHTML = '';
+
+    if (completedText && completedText.length > currentText.length) {
+        // Calculate the necessary padding (spaces) to align the hint
+        // Use non-breaking space (\u00A0) for accurate width measurement in monospace
+        const padding = currentText.padEnd(completedText.length, '\u00A0').slice(0, currentText.length);
+        const hintText = completedText.substring(currentText.length);
+        
+        // This hint structure ensures the hint starts exactly where the user input ends
+        hintHTML = `<span style="opacity:0;">${padding}</span>${hintText}`;
+    }
+    
+    // Update the hint element within the input's relative container
+    let shadowHint = inputElement.previousElementSibling;
+    if (shadowHint && shadowHint.id === 'shadow-hint') {
+        shadowHint.innerHTML = hintHTML;
+    }
+}
+
+// UPDATED: Function to set up listeners, including creating the shadow hint
+function updatePromptListeners() {
+  const input = term.querySelector('.input-line:last-child');
+  
+  // Create shadow hint container just before the input line
+  const shadowHint = document.createElement('span');
+  shadowHint.id = 'shadow-hint';
+  input.parentNode.insertBefore(shadowHint, input);
+
+  input.addEventListener('input', () => {
+      // Update hint whenever user types
+      updateShadowHint(input);
+  });
+  
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const cmd = input.textContent.trim();
+      history.push(cmd);
+      histPos = history.length;
+      run(cmd);
+    } else if (e.key === 'Tab') {
+        e.preventDefault();
+        if (handleTab(input)) {
+            updateShadowHint(input); // Update hint after autocompletion
+        }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (histPos > 0) input.textContent = history[--histPos];
+      else input.textContent = '';
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (histPos < history.length - 1) input.textContent = history[++histPos];
+      else input.textContent = '';
+    }
+    
+    // Defer hint update slightly if text manipulation happened
+    setTimeout(() => updateShadowHint(input), 0);
+
+  });
+}
+
+function prompt() {
+  term.innerHTML += `<span class="prompt">user@site:~$ </span><span class="input-line" contenteditable="true" autofocus></span>`;
+  updatePromptListeners(); // Use new listener setup
+  focusLastInput();
+}
+
+function run(cmd) {
+  const inputLine = term.querySelector('.input-line:last-child');
+  inputLine.outerHTML = `<span>${cmd}</span>`;
+  
+  if (cmd === 'blog') {
+    window.location.href = 'blog.html';
+    return;
+  } 
+  
+  else if (cmd === 'clear') {
+    term.innerHTML = '';
+  } else if (commands[cmd]) {
+    print(commands[cmd]);
+  } else if (cmd !== '') {
+    print(`\nCommand not found: ${cmd}`);
+  }
+  
+  print('\n'); 
+  prompt();
+}
+
+// Global click listener to focus input
+document.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('input-line')) {
+        focusLastInput();
+    }
+});
+
+const header = `
+Welcome to my terminal website!
+
+Type "help" to see available commands.
+`;
+
+print(header)
+prompt();
+</script>
+</body>
+</html>

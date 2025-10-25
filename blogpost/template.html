@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>~ [POST_TITLE] ~</title>
+
+    <meta name="description" content="[POST_DESCRIPTION - A short snippet of the post content]">
+    <link rel="canonical" href="https://yoursite.com/[POST_SLUG].html"> 
+
+    <style>
+      body {
+        background-color: #3e3b3b;
+        color: rgb(136,185,136);
+        font-family: monospace;
+        margin: 0;
+        padding: 10px;
+      }
+      #terminal {
+        white-space: pre-wrap;
+        outline: none;
+        min-height: 100vh;
+      }
+      .prompt {
+        color: #0ff;
+      }
+      .input-line {
+        display: inline;
+        position: relative;
+        min-width: 1ch;
+        outline: none;
+      }
+      /* Styling the STATIC content to look like a terminal output */
+      .post-content-section {
+        white-space: normal;
+        margin-top: 10px;
+        margin-bottom: 20px;
+      }
+      .post-content-section h1, .post-content-section h2 {
+        color: #f00; 
+        text-decoration: underline;
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+      }
+      .post-content-section pre {
+        background-color: #111;
+        border: 1px solid #333;
+        padding: 8px;
+        color: #0ff;
+        white-space: pre-wrap;
+      }
+
+      /* Cursor/Hint Styling */
+      #shadow-hint {
+        position: absolute;
+        color: #c1c194;
+        pointer-events: none;
+        white-space: pre;
+        z-index: 1;
+      }
+    </style>
+</head>
+<body>
+    <div id="terminal" tabindex="0">
+        <div class="post-content-section">
+            <h1>[Post Content H1 Placeholder]</h1>
+            <p>Replace this content with the full, static HTML version of your Markdown post.</p>
+        </div>
+        </div>
+<script>
+const term = document.getElementById('terminal');
+
+let history = [];
+let histPos = 0;
+// Will hold post SLUGS (e.g., 'post', 'post1') loaded dynamically
+let postList = []; 
+
+const commandList = ['help', 'cat', 'exit', 'clear'];
+
+// --- Utility Functions (Shell logic is the same as blog.html) ---
+function print(text='') {
+  term.innerHTML += text + '\n';
+}
+
+function focusLastInput() {
+  const input = term.querySelector('.input-line:last-child');
+  if (input) {
+    input.focus();
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function findCompletion(input) {
+    if (!input) return null;
+    const parts = input.trim().split(/\s+/);
+    const command = parts[0];
+    const arg = parts.length > 1 ? parts.slice(1).join(' ') : null;
+
+    if (command === 'cat' && arg) {
+        const matches = postList.filter(filename => filename.startsWith(arg));
+        return matches.length === 1 ? 'cat ' + matches[0] : null;
+    }
+    const matches = commandList.filter(cmd => cmd.startsWith(command));
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function handleTab(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    if (completedText) {
+        let newText = completedText;
+        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+            newText += ' ';
+        }
+        inputElement.textContent = newText;
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.setStart(inputElement.childNodes[0] || inputElement, newText.length);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } 
+    return true; 
+}
+
+function updateShadowHint(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    let hintHTML = '';
+    if (completedText && completedText.length > currentText.length) {
+        let finalCompletion = completedText;
+        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+             finalCompletion += ' ';
+        }
+        const padding = currentText.padEnd(finalCompletion.length, '');
+        const hintText = finalCompletion.substring(currentText.length);
+        hintHTML = `<span style="opacity:0;">${padding}</span>${hintText}`;
+    }
+    
+    let shadowHint = inputElement.previousElementSibling;
+    if (shadowHint && shadowHint.id === 'shadow-hint') {
+        shadowHint.innerHTML = hintHTML;
+    }
+}
+
+
+function updatePromptListeners() {
+  const input = term.querySelector('.input-line:last-child');
+  
+  const shadowHint = document.createElement('span');
+  shadowHint.id = 'shadow-hint';
+  input.parentNode.insertBefore(shadowHint, input);
+
+  input.addEventListener('input', () => {
+      updateShadowHint(input);
+  });
+  
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const cmd = input.textContent.trim();
+      history.push(cmd);
+      histPos = history.length;
+      run(cmd);
+    } else if (e.key === 'Tab') {
+        e.preventDefault();
+        if (handleTab(input)) {
+            updateShadowHint(input);
+        }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (histPos > 0) input.textContent = history[--histPos];
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (histPos < history.length - 1) input.textContent = history[++histPos];
+      else input.textContent = '';
+    }
+    
+    setTimeout(() => updateShadowHint(input), 0);
+
+  });
+}
+
+function prompt() {
+  term.innerHTML += `<span class="prompt">user@post:~$ </span><span class="input-line" contenteditable="true" autofocus></span>`;
+  updatePromptListeners();
+  focusLastInput();
+}
+
+// --- Command Logic for Post Page ---
+const staticCommands = {
+  help: `Available commands:
+  help      - show this help
+  cat [file] - displays another post by redirecting to its static page (e.g., 'cat post1')
+  exit      - return to the blog index
+  clear     - clear the terminal`
+};
+
+function run(cmd) {
+  const inputLine = term.querySelector('.input-line:last-child');
+  inputLine.outerHTML = `<span>${cmd}</span>`;
+  
+  const [command, arg] = cmd.split(/\s+/);
+
+  if (command === 'clear') {
+    term.innerHTML = '';
+    // Re-print the static content on clear, then prompt
+    const content = document.querySelector('.post-content-section').outerHTML;
+    term.innerHTML += content;
+  } else if (command === 'exit') {
+    // Go back to the blog index/router page
+    window.location.href = 'blog.html';
+    return;
+  } else if (command === 'cat') {
+    if (postList.includes(arg)) {
+      // Redirect to the new post's static HTML file
+      window.location.href = `${arg}.html`;
+      return; 
+    } else if (arg) {
+      print(`\ncat: ${arg}: No such file or post. Available: ${postList.join(', ')}`);
+    } else {
+      print('\ncat: usage: cat [post-name]');
+    }
+  } else if (staticCommands[cmd]) {
+    print('\n' + staticCommands[cmd]);
+  } else if (cmd !== '') {
+    print(`\nCommand not found: ${cmd}`);
+  }
+  
+  print('\n');
+  prompt();
+}
+
+// --- Initialization (Now dynamic for the post page too) ---
+async function initPost() {
+    // 1. Fetch the post list dynamically
+    try {
+        // IMPORTANT: Assuming POSTLIST.txt is inside the 'blogpost' folder.
+        const response = await fetch('blogpost/POSTLIST.txt'); 
+        if (response.ok) {
+            const text = await response.text();
+            // Filter and map: removes empty lines and the '.md' extension
+            postList = text.split('\n')
+                           .filter(line => line.trim() !== '')
+                           .map(line => line.replace(/\.md$/i, ''));
+        }
+    } catch (error) {
+        // Log the error but continue, as the main content is static and loaded
+        console.error("Could not load post manifest for cat command:", error);
+    }
+    
+    // 2. Append a new prompt after the static content
+    prompt();
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('input-line')) {
+        focusLastInput();
+    }
+});
+
+initPost();
+</script>
+</body>
+</html>

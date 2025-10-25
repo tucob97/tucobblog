@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>~ [POST_TITLE] ~</title>
+
+    <meta name="description" content="[POST_DESCRIPTION - A short snippet of the post content]">
+    <link rel="canonical" href="https://yoursite.com/[POST_SLUG].html"> 
+
+    <style>
+      body {
+        background-color: #3e3b3b;
+        color: rgb(136,185,136);
+        font-family: monospace;
+        margin: 0;
+        padding: 10px;
+      }
+      #terminal {
+        white-space: pre-wrap;
+        outline: none;
+        min-height: 100vh;
+        /* CHANGE 4: Add position: relative to terminal to make it the positioning context */
+        /* Change 4: Removing position: relative is better handled by adding a new wrapper */
+      }
+      /* CHANGE 5: The new prompt wrapper */
+      .prompt-line-wrapper {
+        display: flex; /* Ensures prompt and input are inline and aligned */
+        position: relative; /* Acts as the positioning context for the absolute hint */
+        align-items: baseline; /* Better vertical alignment for text */
+      }
+      .prompt {
+        color: #0ff;
+      }
+      .input-line {
+        /* CHANGED: Removed display: inline; for better flex alignment, min-width is enough */
+        position: relative;
+        min-width: 1ch;
+        outline: none;
+        flex-grow: 1; /* Allows it to take up available space, pushing cursor to the left */
+      }
+      /* Styling the STATIC content to look like a terminal output */
+      .post-content-section {
+        white-space: normal;
+        margin-top: 10px;
+        margin-bottom: 20px;
+      }
+      .post-content-section h1, .post-content-section h2 {
+        color: #f00; 
+        text-decoration: underline;
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+      }
+      .post-content-section pre {
+        background-color: #111;
+        border: 1px solid #333;
+        padding: 8px;
+        color: #0ff;
+        white-space: pre-wrap;
+      }
+
+      /* Cursor/Hint Styling */
+      #shadow-hint {
+        /* Position absolute to the new .prompt-line-wrapper */
+        position: absolute;
+        color: #c1c194;
+        pointer-events: none;
+        white-space: pre;
+        z-index: 1;
+        /* NEW: Calculate position relative to the wrapper */
+        left: 0; 
+        /* The content of the hint will be dynamically positioned inside the input line's text flow */
+      }
+      /* The actual input line needs its own relative positioning for the shadow to be a sibling */
+      .input-line-container {
+        position: relative;
+        display: inline-block; /* To contain the absolute hint */
+      }
+      
+    </style>
+</head>
+<body>
+    <div id="terminal" tabindex="0">
+        <div class="post-content-section">
+            <h1>[Post Content H1 Placeholder]</h1>
+            <p>Replace this content with the full, static HTML version of your Markdown post.</p>
+        </div>
+        </div>
+<script>
+const term = document.getElementById('terminal');
+
+let history = [];
+let histPos = 0;
+// Will hold post SLUGS (e.g., 'post', 'post1') loaded dynamically
+let postList = []; // CORRECT VARIABLE: This is populated by initPost
+
+const commandList = ['help', 'cat', 'exit', 'clear'];
+
+// --- Utility Functions (Shell logic is the same as blog.html) ---
+function print(text='') {
+  term.innerHTML += text + '\n';
+}
+
+function focusLastInput() {
+  const input = term.querySelector('.input-line:last-child');
+  if (input) {
+    input.focus();
+    // Scroll the entire terminal div to the bottom
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function findCompletion(input) {
+    if (!input) return null;
+    const parts = input.trim().split(/\s+/);
+    const command = parts[0];
+    const arg = parts.length > 1 ? parts.slice(1).join(' ') : null;
+
+    if (parts.length === 1 && !input.endsWith(' ')) {
+        const matches = commandList.filter(cmd => cmd.startsWith(command));
+        return matches.length === 1 ? matches[0] : null;
+    }
+    
+    // CHANGE 3: Use postList instead of postManifest
+    if (command === 'cat' && arg) {
+        const matches = postList.filter(filename => filename.startsWith(arg));
+        return matches.length === 1 ? 'cat ' + matches[0] : null;
+    }
+    return null;
+}
+
+function handleTab(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    if (completedText) {
+        let newText = completedText;
+        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+            newText += ' ';
+        }
+        inputElement.textContent = newText;
+        // Move cursor to the end
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.setStart(inputElement.childNodes[0] || inputElement, newText.length);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } 
+    return true; 
+}
+
+function updateShadowHint(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    let hintHTML = '';
+    if (completedText && completedText.length > currentText.length) {
+        let finalCompletion = completedText;
+        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+             finalCompletion += ' ';
+        }
+        // The padding is now handled by the browser's rendering in the flow
+        const hintText = finalCompletion.substring(currentText.length);
+        
+        // Find the preceding span for the prompt text
+        const promptSpan = inputElement.parentNode.querySelector('.prompt');
+        const promptText = promptSpan ? promptSpan.textContent : '';
+        
+        // Calculate the padding needed to start the hint after the prompt and current text
+        const totalPaddingLength = promptText.length + currentText.length;
+        // Create an invisible span to push the hint text over
+        const paddingSpan = `<span style="opacity:0;">${' '.repeat(totalPaddingLength)}</span>`;
+
+        hintHTML = `${paddingSpan}${hintText}`;
+
+    }
+    
+    // Find the shadow hint element which is now a direct child of the wrapper
+    let shadowHint = inputElement.parentNode.querySelector('#shadow-hint');
+    if (shadowHint) {
+        shadowHint.innerHTML = hintHTML;
+    }
+}
+
+
+function updatePromptListeners() {
+  const input = term.querySelector('.input-line:last-child');
+  
+  // NOTE: The shadow hint is now inserted in the prompt function into the wrapper
+  let shadowHint = input.parentNode.querySelector('#shadow-hint');
+  if (!shadowHint) {
+      // Should not happen if prompt() is correct, but good to check
+      shadowHint = document.createElement('span');
+      shadowHint.id = 'shadow-hint';
+      input.parentNode.appendChild(shadowHint); // Append to the wrapper
+  }
+
+
+  input.addEventListener('input', () => {
+      updateShadowHint(input);
+  });
+  
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // Clear the hint before processing
+      const shadowHint = input.parentNode.querySelector('#shadow-hint');
+      if (shadowHint) shadowHint.innerHTML = '';
+      
+      const cmd = input.textContent.trim();
+      history.push(cmd);
+      histPos = history.length;
+      run(cmd);
+    } else if (e.key === 'Tab') {
+        e.preventDefault();
+        if (handleTab(input)) {
+            updateShadowHint(input);
+        }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (histPos > 0) input.textContent = history[--histPos];
+      else if (history.length > 0) input.textContent = history[0]; // Stay at the oldest
+      
+      setTimeout(() => updateShadowHint(input), 0);
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (histPos < history.length - 1) input.textContent = history[++histPos];
+      else input.textContent = '';
+      
+      setTimeout(() => updateShadowHint(input), 0);
+    }
+    
+    setTimeout(() => updateShadowHint(input), 0);
+
+  });
+}
+
+function prompt() {
+  // CHANGE 5: Wrap the prompt and input in a new div for relative positioning of the hint
+  const wrapper = document.createElement('div');
+  wrapper.className = 'prompt-line-wrapper';
+  wrapper.innerHTML = `<span class="prompt">user@post:~$ </span><span class="input-line" contenteditable="true" autofocus></span>`;
+
+  // Insert the shadow hint at the beginning of the wrapper
+  const shadowHint = document.createElement('span');
+  shadowHint.id = 'shadow-hint';
+  wrapper.insertBefore(shadowHint, wrapper.firstChild);
+  
+  term.appendChild(wrapper);
+
+  updatePromptListeners();
+  focusLastInput();
+}
+
+// --- Command Logic for Post Page ---
+const staticCommands = {
+  help: `Available commands:
+  help      - show this help
+  ls        - list all available blog posts
+  cat [file] - displays another post by redirecting to its static page (e.g., 'cat post1')
+  exit      - return to the blog index
+  clear     - clear the terminal`
+};
+
+function run(cmd) {
+  const inputLine = term.querySelector('.input-line:last-child');
+  // Find the current wrapper and replace the input line content
+  const currentWrapper = inputLine.closest('.prompt-line-wrapper');
+  if (currentWrapper) {
+      // Find the prompt and input within the wrapper
+      const promptSpan = currentWrapper.querySelector('.prompt');
+      const inputSpan = currentWrapper.querySelector('.input-line');
+      
+      // Reconstruct the line as static text
+      const staticLine = document.createElement('div');
+      staticLine.className = 'prompt-line-wrapper'; // Maintain structure
+      staticLine.innerHTML = `${promptSpan.outerHTML}<span>${cmd}</span>`;
+      
+      // Replace the dynamic wrapper with the static one
+      currentWrapper.parentNode.replaceChild(staticLine, currentWrapper);
+  }
+
+  const [command, arg] = cmd.split(/\s+/);
+
+  if (command === 'clear') {
+    term.innerHTML = '';
+    // Re-print the static content on clear, then prompt
+    const content = document.querySelector('.post-content-section').outerHTML;
+    term.innerHTML += content;
+  } else if (command === 'exit') {
+    // Go back to the blog index/router page
+    // Assuming relative path is correct; should be '../blog.html'
+    window.location.href = '../blog.html'; 
+    return;
+  } else if (command === 'ls') {
+    // CHANGE 1: Use postList
+    if (postList.length === 0) {
+      print('\nls: Error: Manifest not loaded. Check POSTLIST.txt location and server status.');
+      print('\n');
+      prompt();
+      return;
+    }
+    // Lists the post slugs (without .html or .md)
+    const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('  ');
+    print(`\nTotal posts: ${postList.length}\n${fileList}`);
+  } else if (command === 'cat') {
+    // CHANGE 2: Use postList
+    if (postList.includes(arg)) {
+      // Redirect to the new post's static HTML file
+      window.location.href = `${arg}.html`;
+      return; 
+    } else if (arg) {
+      print(`\ncat: ${arg}: No such file or post. Available: ${postList.join(', ')}`);
+    } else {
+      print('\ncat: usage: cat [post-name]');
+    }
+  } else if (staticCommands[cmd]) {
+    print('\n' + staticCommands[cmd]);
+  } else if (cmd !== '') {
+    print(`\nCommand not found: ${cmd}`);
+  }
+  
+  print('\n');
+  prompt();
+}
+
+// --- Initialization (Now dynamic for the post page too) ---
+async function initPost() {
+    // 1. Fetch the post list dynamically
+    try {
+        // IMPORTANT: Assuming POSTLIST.txt is inside the 'blogpost' folder.
+        const response = await fetch('POSTLIST.txt'); 
+        if (response.ok) {
+            const text = await response.text();
+            // Filter and map: removes empty lines and the '.md' extension
+            // Populates the global postList variable
+            postList = text.split('\n')
+                           .filter(line => line.trim() !== '')
+                           // Optionally remove the .md extension if POSTLIST.txt contains them
+                           .map(line => line.replace(/\.md$/, '')); 
+                           
+        } else {
+             // Handle case where file exists but is empty or 404
+             console.warn("POSTLIST.txt fetch failed or file is empty/not found.");
+        }
+    } catch (error) {
+        // Log the error but continue, as the main content is static and loaded
+        console.error("Could not load post manifest for cat command:", error);
+    }
+    
+    // 2. Append a new prompt after the static content
+    prompt();
+}
+
+document.addEventListener('click', (e) => {
+    // Check if the click is outside the entire prompt line wrapper to avoid refocusing during text selection
+    if (!e.target.closest('.prompt-line-wrapper')) {
+        focusLastInput();
+    }
+});
+
+initPost();
+</script>
+</body>
+</html>

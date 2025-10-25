@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>~ my blog: /blogpost ~</title>
+
+<style>
+  body {
+    background-color: #3e3b3b;
+    color: rgb(136,185,136);
+    font-family: monospace;
+    margin: 0;
+    padding: 10px;
+  }
+  #terminal {
+    white-space: pre-wrap;
+    outline: none;
+    min-height: 100vh;
+  }
+  .prompt {
+    color: #0ff; /* Cyan prompt */
+  }
+  .input-line {
+    display: inline;
+    position: relative; 
+    min-width: 1ch; 
+    outline: none;
+  }
+  .file-name {
+    color: #fff;
+  }
+  
+  #shadow-hint {
+    position: absolute;
+    color: #c1c194; /* Dark gray for the "shadow" effect */
+    pointer-events: none;
+    white-space: pre;
+    z-index: 1;
+  }
+</style>
+</head>
+<body>
+<div id="terminal" tabindex="0"></div>
+<script>
+const term = document.getElementById('terminal');
+
+let history = [];
+let histPos = 0;
+
+let postManifest = []; 
+
+const commandList = ['help', 'ls', 'cat', 'exit', 'clear'];
+
+// --- Core Terminal Functions (unchanged logic) ---
+
+function print(text='') {
+  term.innerHTML += text + '\n';
+}
+
+function focusLastInput() {
+  const input = term.querySelector('.input-line:last-child');
+  if (input) {
+    input.focus();
+    term.scrollTop = term.scrollHeight;
+  }
+}
+
+function findCompletion(input) {
+    if (!input) return null;
+    const parts = input.trim().split(/\s+/);
+    const command = parts[0];
+    const arg = parts.length > 1 ? parts.slice(1).join(' ') : null;
+
+    if (parts.length === 1 && !input.endsWith(' ')) {
+        const matches = commandList.filter(cmd => cmd.startsWith(command));
+        return matches.length === 1 ? matches[0] : null;
+    }
+    
+    if (command === 'cat' && arg) {
+        const matches = postManifest.filter(filename => filename.startsWith(arg));
+        return matches.length === 1 ? 'cat ' + matches[0] : null;
+    }
+    return null;
+}
+
+function handleTab(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    if (completedText) {
+        let newText = completedText;
+        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+            newText += ' ';
+        }
+        inputElement.textContent = newText;
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.setStart(inputElement.childNodes[0] || inputElement, newText.length);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+    } 
+    return true; 
+}
+
+function updateShadowHint(inputElement) {
+    const currentText = inputElement.textContent.trim();
+    const completedText = findCompletion(currentText);
+
+    let hintHTML = '';
+    if (completedText && completedText.length > currentText.length) {
+        let finalCompletion = completedText;
+        if (commandList.includes(completedText) && !currentText.includes(' ')) {
+             finalCompletion += ' ';
+        }
+        const padding = currentText.padEnd(finalCompletion.length, '');
+        const hintText = finalCompletion.substring(currentText.length);
+        hintHTML = `<span style="opacity:0;">${padding}</span>${hintText}`;
+    }
+    
+    let shadowHint = inputElement.previousElementSibling;
+    if (shadowHint && shadowHint.id === 'shadow-hint') {
+        shadowHint.innerHTML = hintHTML;
+    }
+}
+
+
+function updatePromptListeners() {
+  const input = term.querySelector('.input-line:last-child');
+  
+  const shadowHint = document.createElement('span');
+  shadowHint.id = 'shadow-hint';
+  input.parentNode.insertBefore(shadowHint, input);
+
+  input.addEventListener('input', () => {
+      updateShadowHint(input);
+  });
+  
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const cmd = input.textContent.trim();
+      history.push(cmd);
+      histPos = history.length;
+      run(cmd);
+    } else if (e.key === 'Tab') {
+        e.preventDefault();
+        if (handleTab(input)) {
+            updateShadowHint(input);
+        }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (histPos > 0) input.textContent = history[--histPos];
+      else input.textContent = '';
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (histPos < history.length - 1) input.textContent = history[++histPos];
+      else input.textContent = '';
+    }
+    
+    setTimeout(() => updateShadowHint(input), 0);
+
+  });
+}
+
+function prompt() {
+  term.innerHTML += `<span class="prompt">user@blog:~$ </span><span class="input-line" contenteditable="true" autofocus></span>`;
+  updatePromptListeners();
+  focusLastInput();
+}
+
+// --- Command Logic (Updated to Redirect) ---
+
+const staticCommands = {
+  help: `Available commands:
+  help      - show this help
+  ls        - list all available blog posts
+  cat [file] - displays the content of a post by redirecting to its static page (e.g., 'cat post')
+  exit      - return to the main site terminal
+  clear     - clear the terminal`
+};
+
+function run(cmd) {
+  const inputLine = term.querySelector('.input-line:last-child');
+  inputLine.outerHTML = `<span>${cmd}</span>`;
+  
+  const [command, arg] = cmd.split(/\s+/);
+
+  if (command === 'clear') {
+    term.innerHTML = '';
+  } else if (command === 'exit') {
+    window.location.href = 'index.html';
+    return;
+  } else if (command === 'ls') {
+    if (postManifest.length === 0) {
+      print('\nls: Error: Manifest not loaded. Check POSTLIST.txt location and server status.');
+      print('\n');
+      prompt();
+      return;
+    }
+    // Lists the post slugs (without .html or .md)
+    const fileList = postManifest.map(p => `<span class="file-name">${p}</span>`).join('  ');
+    print(`\nTotal posts: ${postManifest.length}\n${fileList}`);
+  } else if (command === 'cat') {
+    if (postManifest.includes(arg)) {
+      // Key Change: Redirect to the static HTML file for SEO
+      window.location.href = `blogpost/${arg}.html`;
+      return; 
+    } else if (arg) {
+      print(`\ncat: ${arg}: No such file or post.`);
+    } else {
+      print('\ncat: usage: cat [post-name] (e.g., cat post)');
+    }
+  } else if (staticCommands[cmd]) {
+    print('\n' + staticCommands[cmd]);
+  } else if (cmd !== '') {
+    print(`\nCommand not found: ${cmd}`);
+  }
+  
+  print('\n');
+  prompt();
+}
+
+// --- Initialization Function (Dynamically fetching the post list) ---
+async function initBlog() {
+  const tucob = `
+#                                                                                    
+#                                             mm        mmmm                         
+#       ##                                    ##        ""##                         
+#     #######   ##    ##   m#####m   m####m   ##m###m     ##       m####m    m###m## 
+#       ##      ##    ##  ##"    "  ##"  "##  ##"  "##    ##      ##"  "##  ##"  "## 
+#       ##      ##    ##  ##        ##    ##  ##    ##    ##      ##    ##  ##    ## 
+#       ##mmm   ##mmm###  "##mmmm#  "##mm##"  ###mm##"    ##mmm   "##mm##"  "##mm### 
+#        """"    """" ""    """""     """"    "" """       """"     """"     m""" ## 
+#                                                                            "####"" 
+#                                                                                    
+  `;
+  print(tucob);
+  print('Welcome to the Blog Terminal');
+
+  try {
+    // IMPORTANT: Assuming POSTLIST.txt is inside the 'blogpost' folder.
+    const response = await fetch('blogpost/POSTLIST.txt'); 
+    if (!response.ok) {
+        throw new Error('Manifest fetch failed.');
+    }
+    const text = await response.text();
+    
+    // Filter and map: removes empty lines and the '.md' extension
+    postManifest = text.split('\n').filter(line => line.trim() !== '');
+
+    print(`[Post list loaded. ${postManifest.length} files found.]`);
+    print('Type "help" for a list of commands.\n');
+  } catch (error) {
+    print('<span style="color: #f00;">INIT ERROR: Could not load post list. (Is POSTLIST.txt correctly placed in /blogpost?)</span>');
+    print('<span style="color: #f00;">**Please start a local web server (e.g., python -m http.server).**</span>');
+    print('\n');
+  }
+  
+  prompt();
+}
+
+document.addEventListener('click', (e) => {
+    if (!e.target.classList.contains('input-line')) {
+        focusLastInput();
+    }
+});
+
+initBlog();
+</script>
+</body>
+</html>
