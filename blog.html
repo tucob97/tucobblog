@@ -50,7 +50,8 @@ let currentInput = ''; // <-- NEW: Store current typing
 
 let postManifest = []; 
 
-const commandList = ['help', 'ls', 'cat', 'exit', 'clear'];
+// MODIFIED: Added 'latest' to the commandList
+const commandList = ['help', 'ls', 'cat', 'exit', 'clear', 'latest'];
 
 function print(text='') {
   term.innerHTML += text + '\n';
@@ -244,11 +245,13 @@ function prompt() {
   focusLastInput();
 }
 
+// MODIFIED: Added 'latest' command description
 const staticCommands = {
   help: `Available commands:
   help      - show this help
   ls        - list all available blog posts
   cat [file] - displays the content of a post by redirecting to its static page (e.g., 'cat post')
+  latest    - go to the most recent post (last entry in POSTLIST.txt)
   exit      - return to the main site terminal
   clear     - clear the terminal`
 };
@@ -282,6 +285,17 @@ function run(cmd) {
     } else {
       print('\ncat: usage: cat [post-name] (e.g., cat post)');
     }
+  // NEW LOGIC: Handle 'latest' command
+  } else if (command === 'latest') {
+    if (postManifest.length > 0) {
+        const latestPost = postManifest[postManifest.length - 1];
+        print(`\nRedirecting to latest post: ${latestPost}`);
+        window.location.href = `blogpost/${latestPost}.html`;
+        return;
+    } else {
+        print('\nlatest: Error: Post manifest not loaded or empty.');
+    }
+  // END NEW LOGIC
   } else if (staticCommands[cmd]) {
     print('\n' + staticCommands[cmd]);
   } else if (cmd !== '') {
@@ -297,11 +311,10 @@ async function initBlog() {
                                               ____________________________________________
                                              +                                            |
 #  +----------------------------------------------------+                                 |                                             
-#  |                                         | mm       |  mmmm                           |
-#  |    ##                                   | ##       |  ""##                           |
-#  |  #######   ##    ##   m#####m   m####m  | ##m###m  |    ##       m####m    m###m##   |
-#  |    ##      ##    ##  ##"    "  ##"  "## | ##"  "## |    ##      ##"  "##  ##"  "##   |
-#  |    ##      ##    ##  ##        ##    ## | ##    ## |    ##      ##    ##  ##    ##   |
+#  |    ##                                   | mm       |  mmmm                           |
+#  |  #######   ##    ##   m#####m   m####m  | ##       |  ""##                           |
+#  |    ##      ##    ##  ##"    "  ##"  "## | ##m###m  |    ##       m####m    m###m##   |
+#  |    ##      ##    ##  ##        ##    ## | ##"  "## |    ##      ##"  "##  ##"  "##   |
 #  |    ##mmm   ##mmm###  "##mmmm#  "##mm##" | ###mm##" |    ##mmm   "##mm##"  "##mm###   |
 #  |     """"    """" ""    """""     """"   | "" """   |     """"     """"     m""" ##   |
 #  |                                         |          |                       "####""   |
@@ -312,7 +325,9 @@ async function initBlog() {
   print('Welcome to the Blog Terminal');
   print('');
   print('Type "ls" to list all my blog posts');
-  
+  print('');
+  print('Type "latest" to see my latest post');
+  print('');
   try {
     const url = `blogpost/POSTLIST.txt`; 
     const response = await fetch(url, { cache: "no-store" }); 
@@ -324,7 +339,7 @@ async function initBlog() {
     
     postManifest = text.split('\n').filter(line => line.trim() !== '');
 
-    print(`[Post list loaded. ${postManifest.length} files found.]`);
+    //print(`[Post list loaded. ${postManifest.length} files found.]`);
     print('Type "help" for a list of commands.\n');
   } catch (error) {
     print('<span style="color: #f00;">INIT ERROR: Could not load post list. (Is POSTLIST.txt correctly placed in /blogpost?)</span>');
