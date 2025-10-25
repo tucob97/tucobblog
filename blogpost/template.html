@@ -6,6 +6,7 @@
 
     <meta name="description" content="[POST_DESCRIPTION - A short snippet of the post content]">
     <link rel="canonical" href="https://yoursite.com/[POST_SLUG].html"> 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/2.1.0/showdown.min.js"></script>
 
     <style>
       body {
@@ -30,6 +31,7 @@
         outline: none;
       }
       /* Styling the STATIC content to look like a terminal output */
+      /* Kept for 'clear' functionality, but content is now loaded dynamically */
       .post-content-section {
         white-space: normal;
         margin-top: 10px;
@@ -42,6 +44,26 @@
         margin-bottom: 0.5em;
       }
       .post-content-section pre {
+        background-color: #111;
+        border: 1px solid #333;
+        padding: 8px;
+        color: #0ff;
+        white-space: pre-wrap;
+      }
+      
+      /* NEW: Styling for dynamically loaded content */
+      .post-output {
+        white-space: normal;
+        margin-top: 10px;
+        margin-bottom: 20px;
+      }
+      .post-output h1, .post-output h2 {
+        color: #f00; 
+        text-decoration: underline;
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+      }
+      .post-output pre {
         background-color: #111;
         border: 1px solid #333;
         padding: 8px;
@@ -61,24 +83,50 @@
 </head>
 <body>
     <div id="terminal" tabindex="0">
-        <div class="post-content-section">
-            <h1>[Post Content H1 Placeholder]</h1>
-            <p>Replace this content with the full, static HTML version of your Markdown post.</p>
-        </div>
         </div>
 <script>
 const term = document.getElementById('terminal');
 
+// NEW: Initialize Showdown Converter
+const converter = new showdown.Converter(); 
+
 let history = [];
 let histPos = 0;
-// Will hold post SLUGS (e.g., 'post', 'post1') loaded dynamically
+// postList will contain slugs without '.md' (e.g., 'post1')
 let postList = []; 
 
-const commandList = ['help', 'cat', 'exit', 'clear'];
+const commandList = ['help', 'cat', 'exit', 'clear', 'ls'];
 
 // --- Utility Functions (Shell logic is the same as blog.html) ---
 function print(text='') {
   term.innerHTML += text + '\n';
+}
+
+async function catFile(fileName) {
+  // Use the full filename provided (e.g., 'post.md' or 'post1.md')
+  const filePath = `${fileName}`; 
+  
+  print(`[Fetching ${filePath}...]`);
+  
+  try {
+    const response = await fetch(filePath);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const markdownText = await response.text();
+    
+    // Use the converter instance
+    const htmlContent = converter.makeHtml(markdownText);
+    print(`<div class="post-output">${htmlContent}</div>`);
+
+  } catch (error) {
+    // The error message for local server issue
+    print(`<span style="color: #f00;">Error: Could not load post from ${filePath}.</span>`);
+    print(`<span style="color: #f00;">**REMINDER:** You must run a local web server for this to work.</span>`);
+  }
+  
+  print('\n'); 
+  prompt(); // Prompt after async operation completes
 }
 
 function focusLastInput() {
@@ -96,7 +144,8 @@ function findCompletion(input) {
     const arg = parts.length > 1 ? parts.slice(1).join(' ') : null;
 
     if (command === 'cat' && arg) {
-        const matches = postList.filter(filename => filename.startsWith(arg));
+        // Match slugs, but return the slug with the file extension for catFile
+        const matches = postList.filter(slug => slug.startsWith(arg));
         return matches.length === 1 ? 'cat ' + matches[0] : null;
     }
     const matches = commandList.filter(cmd => cmd.startsWith(command));
@@ -192,7 +241,8 @@ function prompt() {
 const staticCommands = {
   help: `Available commands:
   help      - show this help
-  cat [file] - displays another post by redirecting to its static page (e.g., 'cat post1')
+  ls        - list available posts (from POSTLIST.txt)
+  cat [file] - display a post file (e.g., 'cat post1')
   exit      - return to the blog index
   clear     - clear the terminal`
 };
@@ -202,21 +252,30 @@ function run(cmd) {
   inputLine.outerHTML = `<span>${cmd}</span>`;
   
   const [command, arg] = cmd.split(/\s+/);
+  let shouldPrompt = true;
 
   if (command === 'clear') {
     term.innerHTML = '';
-    // Re-print the static content on clear, then prompt
-    const content = document.querySelector('.post-content-section').outerHTML;
-    term.innerHTML += content;
+    // Since static content is gone, just print a message on clear
+    print('Type \'ls\' to see available posts, or \'help\' for commands.');
   } else if (command === 'exit') {
     // Go back to the blog index/router page
-    window.location.href = 'blog.html';
+    window.location.href = '../blog.html';
     return;
+  } else if (command === 'ls') {
+    if (postList.length === 0) {
+      print('\nls: Error: Manifest not loaded. Check POSTLIST.txt location and server status.');
+    } else {
+      // Lists the post slugs (without .md)
+      const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('  ');
+      print(`\nTotal posts: ${postList.length}\n${fileList}`);
+    }
   } else if (command === 'cat') {
+    // NEW LOGIC: Use catFile for dynamic fetching
     if (postList.includes(arg)) {
-      // Redirect to the new post's static HTML file
-      window.location.href = `${arg}.html`;
-      return; 
+      // Pass the full file name including extension to catFile
+      catFile(`${arg}.md`); 
+      shouldPrompt = false; // catFile calls prompt() on completion
     } else if (arg) {
       print(`\ncat: ${arg}: No such file or post. Available: ${postList.join(', ')}`);
     } else {
@@ -228,30 +287,36 @@ function run(cmd) {
     print(`\nCommand not found: ${cmd}`);
   }
   
-  print('\n');
-  prompt();
+  if (shouldPrompt) {
+      print('\n');
+      prompt();
+  }
 }
 
-// --- Initialization (Now dynamic for the post page too) ---
+// --- Initialization ---
 async function initPost() {
-    // 1. Fetch the post list dynamically
+    // 1. Clear any initial content/placeholders
+    term.innerHTML = '';
+
+    // 2. Fetch the post list dynamically
     try {
-        // IMPORTANT: Assuming POSTLIST.txt is inside the 'blogpost' folder.
-        const response = await fetch('blogpost/POSTLIST.txt'); 
+        // IMPORTANT: Assuming POSTLIST.txt is in the same directory.
+        const response = await fetch('POSTLIST.txt'); 
         if (response.ok) {
             const text = await response.text();
             // Filter and map: removes empty lines and the '.md' extension
+            // We store slugs (e.g., 'post1') in postList
             postList = text.split('\n')
                            .filter(line => line.trim() !== '')
                            .map(line => line.replace(/\.md$/i, ''));
         }
     } catch (error) {
-        // Log the error but continue, as the main content is static and loaded
         console.error("Could not load post manifest for cat command:", error);
     }
     
-    // 2. Append a new prompt after the static content
-    prompt();
+    // 3. Automatically load the main post file: post.md
+    // catFile will handle the fetching and call prompt() when done.
+    catFile('post.md');
 }
 
 document.addEventListener('click', (e) => {
@@ -259,7 +324,6 @@ document.addEventListener('click', (e) => {
         focusLastInput();
     }
 });
-
 initPost();
 </script>
 </body>
