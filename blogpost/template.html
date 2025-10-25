@@ -24,6 +24,9 @@
       .prompt {
         color: #0ff;
       }
+      .file-name {
+        color: #fff;
+      }
       .input-line {
         display: inline;
         position: relative;
@@ -35,11 +38,17 @@
         margin-top: 10px;
         margin-bottom: 20px;
       }
-      .post-output h1, .post-output h2 {
-        color: #f00; 
+      .post-output h1 {
+        color: #f00; /* Main title remains RED */
         text-decoration: underline;
         margin-top: 1em;
         margin-bottom: 0.5em;
+      }
+      .post-output h2 {
+        color: rgb(219, 118, 118); /* Subtitle is now CYAN */
+        text-decoration: underline;
+        margin-top: 0.5em; /* Slightly less space above for a better subtitle look */
+        margin-bottom: 1em;
       }
       .post-output pre {
         background-color: #111;
@@ -314,7 +323,7 @@ function run(cmd) {
       print('\nls: Error: Manifest not loaded. Check POSTLIST.txt location and server status.');
     } 
       
-    const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('  ');
+    const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('\n');
     print(`\nTotal posts: ${postList.length}\n${fileList}`);
 
   } else if (command === 'cat') {

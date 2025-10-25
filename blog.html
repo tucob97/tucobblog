@@ -274,7 +274,7 @@ function run(cmd) {
       prompt();
       return;
     }
-    const fileList = postManifest.map(p => `<span class="file-name">${p}</span>`).join('  ');
+    const fileList = postManifest.map(p => `<span class="file-name">${p}</span>`).join('\n');
     print(`\nTotal posts: ${postManifest.length}\n${fileList}`);
   } else if (command === 'cat') {
     if (postManifest.includes(arg)) {

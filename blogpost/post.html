@@ -30,16 +30,25 @@
         min-width: 1ch;
         outline: none;
       }
+      .file-name {
+        color: #fff;
+      }
       .post-output {
         white-space: normal;
         margin-top: 10px;
         margin-bottom: 20px;
       }
-      .post-output h1, .post-output h2 {
-        color: #f00; 
+      .post-output h1 {
+        color: #f00; /* Main title remains RED */
         text-decoration: underline;
         margin-top: 1em;
         margin-bottom: 0.5em;
+      }
+      .post-output h2 {
+        color: rgb(219, 118, 118); /* Subtitle is now CYAN */
+        text-decoration: underline;
+        margin-top: 0.5em; /* Slightly less space above for a better subtitle look */
+        margin-bottom: 1em;
       }
       .post-output pre {
         background-color: #111;
@@ -314,7 +323,7 @@ function run(cmd) {
       print('\nls: Error: Manifest not loaded. Check POSTLIST.txt location and server status.');
     } 
       
-    const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('  ');
+    const fileList = postList.map(p => `<span class="file-name">${p}</span>`).join('\n');
     print(`\nTotal posts: ${postList.length}\n${fileList}`);
 
   } else if (command === 'cat') {
@@ -358,10 +367,20 @@ async function initPost() {
 }
 
 document.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('input-line')) {
+    // 1. Check if the user is actively making a text selection.
+    // If the selection object has any range (i.e., text is being selected), don't steal focus.
+    const selection = window.getSelection();
+    if (selection && selection.type === 'Range') {
+        return; // Exit and allow the selection to happen
+    }
+
+    // 2. If no text is selected, proceed with focusing the input.
+    if (!e.target.classList.contains('input-line') && e.target.closest('#terminal')) {
         focusLastInput();
     }
 });
+
+
 initPost();
 </script>
 </body>

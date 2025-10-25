@@ -2,16 +2,11 @@
 
 ## Minimalist Web Development
 
-Hello world! This post is rendered directly from a Markdown file. 
-
-The beauty of this terminal-style blog is its **speed and simplicity**. We don't need heavy frameworks; plain HTML, CSS, and a little JavaScript are enough.
-
-### Code Example
-
-You can easily embed code blocks:
-
+<div style="background-color: #1a1a1a; border: 1px solid #444; padding: 5px; margin-bottom: 10px; font-size: 0.9em; color: #fff;">
+<span style="color: #0ff;">Javascript</span>
+</div>
 ```
-javascript
+//Javascript
 function helloTerminal() {
   console.log('user@site:~$ echo Hello');
 }
