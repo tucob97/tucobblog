@@ -331,7 +331,15 @@ async function initBlog() {
 }
 
 document.addEventListener('click', (e) => {
-    if (!e.target.classList.contains('input-line')) {
+    // 1. Check if the user is actively making a text selection.
+    // If the selection object has any range (i.e., text is being selected), don't steal focus.
+    const selection = window.getSelection();
+    if (selection && selection.type === 'Range') {
+        return; // Exit and allow the selection to happen
+    }
+
+    // 2. If no text is selected, proceed with focusing the input.
+    if (!e.target.classList.contains('input-line') && e.target.closest('#terminal')) {
         focusLastInput();
     }
 });
